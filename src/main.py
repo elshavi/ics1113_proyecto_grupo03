@@ -1,6 +1,8 @@
 import gurobipy as gp
 from gurobipy import GRB
-from io_params import load_all_params
+from extraer_datos import load_parameters
+import sys
+
 
 # funcion para modelar el (a,d,h) anterior dado el (a,d,h) actual
 def instante_anterior(A, D, H, a, d, h):
@@ -75,7 +77,7 @@ def build_model(data: dict):
     Pa = m.addVars(A, vtype=GRB.CONTINUOUS, lb=0.0, name="Pa")
 
     # D_jadh: desgaste en baterias de tipo j en año a, dia d y hora h 
-    D = m.addVars(J, A, D, H, vtype=GRB.CONTINUOUS, lb=0.0, name="D")
+    Des = m.addVars(J, A, D, H, vtype=GRB.CONTINUOUS, lb=0.0, name="D")
 
     # U_a utilidad anual en año a
     U = m.addVars(A, vtype=GRB.CONTINUOUS, lb=-GRB.INFINITY, name="U")
@@ -114,12 +116,12 @@ def build_model(data: dict):
 
     # 6.3 Límite de compras por año (bmja)
     # caso base
-    m.addConstrs(Pa[a0] == beta + U[a0], name=f"presupuesto_base_a{a0}")
+    m.addConstr(Pa[a0] == beta + U[a0], name=f"presupuesto_base_a{a0}")
     # caso general
     for idx_a in range(1, len(A)):
         a_actual = A[idx_a]
         a_anterior = A[idx_a - 1]
-        m.addConstrs(Pa[a_actual] == Pa[a_anterior] + U[a_actual],
+        m.addConstr(Pa[a_actual] == Pa[a_anterior] + U[a_actual],
                      name=f"presupuesto_a{a_actual}")
 
     # 6.4 Restricción de compra de baterías por presupuesto:
@@ -164,13 +166,104 @@ def build_model(data: dict):
                         - etadj[j] * Fbr[(j,a,d,h)],
                         name=f"energia_bateria_j{j}_a{a}_d{d}_h{h}")
                     
-    # 6.7 Restricción de capacidad máxima de baterías considerando desgaste:
+    # 6.7 Energia maxima bateria:
+    for j in J:
+        for a in A:
+            for d in D:
+                for h in H:
+                    m.addConstr(
+                        E[(j,a,d,h)] <= tj[j] * B[(j,a)] - Des[(j,a,d,h)],
+                        name=f"max_energia_bateria_j{j}_a{a}_d{d}_h{h}")
+    
+    # 6.8 La bateróa solo puede descargarse cuando tiene carga
+    for j in J:
+        for a in A:
+            for d in D:
+                for h in H:
+                    m.addConstr(
+                        Fbr[(j,a,d,h)] <= E[(j,a,d,h)],
+                        name=f"descarga_factible_j{j}_a{a}_d{d}_h{h}")
+
+    # 6.9 Vertimiento
+    for a in A:
+        for d in D:
+            for h in H:
+                m.addConstr(
+                    V[(a,d,h)] ==
+                    wadh[(a,d,h)]
+                    - (Fpr[(a,d,h)] + gp.quicksum(Fpb[(j,a,d,h)] for j in J)),
+                    name=f"vertimiento_a{a}_d{d}_h{h}")
+
+    #6.10 Restricciones de desgaste
+    for j in J:
+        #caso base
+        m.addConstr(
+            Des[(j,a0,d0,h0)] == 0.0,
+            name=f"desgaste_base_j{j}")
+    
+        #caso general
+        for a in A:
+            for d in D:
+                for h in H:
+                    if (a == a0) and (d == d0) and (h == h0):
+                        continue
+                    previo = instante_anterior(A, D, H, a, d, h)
+                    a_prev, d_prev, h_prev = previo
+
+                    m.addConstr(
+                        Des[(j,a,d,h)] ==
+                        Des[(j,a_prev,d_prev,h_prev)]
+                        + tasa_desgaste * tj[j] * B[(j,a)],
+                        name=f"desgaste_j{j}_a{a}_d{d}_h{h}")
+                    
+                    #cota superior desgaste
+                    m.addConstr(
+                        Des[(j,a,d,h)] <= tj[j] * B[(j,a)],
+                        name=f"cota_desgaste_j{j}_a{a}_d{d}_h{h}")
+                    
+    return m
+
+def ejecutar_modelo(datos: dict, mip_gap = 0.0, time_limit = None):
+
+    modelo = build_model(datos)
+
+    # gurobi config
+    modelo.Params.MIPGap = mip_gap
+    if time_limit is not None:
+        modelo.Params.TimeLimit = time_limit
+
+    modelo.optimize()
+    return modelo
+    
+#rutas de excel para cada parametro
+rutas = {
+    "SETS": "../data/sets.xlsx",
+    "c": "../data/costos_baterias.xlsx",
+    "etac": "../data/eficiencia_carga.xlsx",
+    "etad": "../data/eficiencia_descarga.xlsx",
+    "t": "../data/capacidad_baterias.xlsx",
+    "b0": "../data/baterias_iniciales.xlsx",
+    "beta": "../data/presupuesto_inicial.xlsx",
+    "p": "../data/precio_energia.xlsx",
+    "m": "../data/capacidad_red.xlsx",
+    "w": "../data/produccion_solar.xlsx",
+    "gamma": "../data/costo_vertimiento.xlsx"
+}
+
+#que hoja utilizar de cada excel
+#si no se pone nada, utiliza hoja con el nombre de la key
+hojas = {
+}
+
 
 if __name__ == "__main__":
-    # Carpeta con los xlsx (uno por parámetro)
-    base_params_dir = "./params_excel"
-    model = build_model(base_params_dir)
-    model.optimize()
+    if len(sys.argv) < 3:
+        print("Uso: python main.py <mip_gap> <time_limit(seg)>")
+        sys.exit(1)
+    mip_gap = float(sys.argv[1])
+    time_limit = int(sys.argv[2])
 
-    if model.status == GRB.OPTIMAL or model.status == GRB.INTERRUPTED:
-        print("FO =", model.objVal)
+    datos = load_parameters(rutas, hojas)
+    modelo = ejecutar_modelo(datos, mip_gap, time_limit)
+    
+    

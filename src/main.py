@@ -3,6 +3,209 @@ from gurobipy import GRB
 from extraer_datos import load_parameters
 import sys
 import os
+from datetime import datetime
+
+def resumen_post_solve(modelo, datos, ruta_txt="resultado_detallado.txt"):
+    """
+    - Imprime en consola un resumen ejecutivo del plan óptimo.
+    - Escribe un archivo .txt con más detalle de resultados.
+    """
+
+    # 1. sacar status y objetivo
+    status = modelo.Status
+    obj = None
+    if modelo.SolCount > 0:
+        obj = modelo.ObjVal
+
+    # 2. sacar los sets y parámetros clave para reportar
+    J = datos["J"]
+    A = datos["A"]
+    D = datos["D"]
+    H = datos["H"]
+
+    beta_inicial = datos["beta"]         # presupuesto inicial β
+    costo_bateria = datos["cj"]          # cj
+    capacidad_bateria = datos["tj"]      # tj
+    baterias_iniciales = datos["boj"]    # b0j
+
+    # 3. recolectar algunas decisiones relevantes del modelo
+    #    - Baterias[j,a] = total de baterías tipo j instaladas en año a
+    #    - BateriasNuevas[j,a] = nuevas baterías compradas en año a
+    #    - Utilidad[a] = utilidad del año a
+    #    - Presupuesto[a] = presupuesto en año a
+    #    - Vertimiento[a,d,h] = energía vertida
+    # OJO: ajustar nombres de variables si en tu modelo se llaman distinto
+
+    # helper seguro para obtener una var por nombre base
+    def get_var(name):
+        return {v.VarName: v for v in modelo.getVars() if v.VarName.startswith(name + "[")}
+
+    vars_B           = get_var("Baterias")          if any(v.VarName.startswith("Baterias[") for v in modelo.getVars()) else get_var("B")
+    vars_BN          = get_var("BateriasNuevas")    if any(v.VarName.startswith("BateriasNuevas[") for v in modelo.getVars()) else get_var("BN")
+    vars_Utilidad    = get_var("Utilidad")          if any(v.VarName.startswith("Utilidad[") for v in modelo.getVars()) else get_var("U")
+    vars_Presupuesto = get_var("Presupuesto")       if any(v.VarName.startswith("Presupuesto[") for v in modelo.getVars()) else get_var("Pa")
+    vars_Vertimiento = get_var("Vertimiento")       if any(v.VarName.startswith("Vertimiento[") for v in modelo.getVars()) else get_var("V")
+
+    # armar data agregada por año
+    baterias_por_anio = {}      # {a: {j: cantidad total instalada B[j,a]}}
+    nuevas_por_anio   = {}      # {a: {j: nuevas BateriasNuevas[j,a]}}
+    utilidad_por_anio = {}      # {a: Utilidad[a]}
+    presupuesto_anio  = {}      # {a: Presupuesto[a]}
+    vert_total_anio   = {}      # {a: vertimiento total sum_{d,h} V[a,d,h]}
+
+    for a in A:
+        # utilidad y presupuesto
+        # Buscar Utilidad[a] en vars_Utilidad
+        # VarName típico: Utilidad[2025] o U[2025]
+        for key, var in vars_Utilidad.items():
+            # extraer índice entre corchetes
+            # ej: "Utilidad[2025]" -> "2025"
+            idx = key[key.find("[")+1 : key.find("]")]
+            if str(a) == idx:
+                utilidad_por_anio[a] = var.X
+
+        for key, var in vars_Presupuesto.items():
+            idx = key[key.find("[")+1 : key.find("]")]
+            if str(a) == idx:
+                presupuesto_anio[a] = var.X
+
+        # baterías totales y nuevas por tipo j
+        baterias_por_anio[a] = {}
+        nuevas_por_anio[a]   = {}
+        for j in J:
+            # Baterias[j,a]
+            for key, var in vars_B.items():
+                # Formato esperado: Baterias[1,2025] o B[1,2025]
+                idxs = key[key.find("[")+1 : key.find("]")].split(",")
+                if len(idxs) == 2:
+                    j_idx, a_idx = idxs
+                    if str(j) == j_idx.strip() and str(a) == a_idx.strip():
+                        baterias_por_anio[a][j] = var.X
+
+            # BateriasNuevas[j,a]
+            for key, var in vars_BN.items():
+                idxs = key[key.find("[")+1 : key.find("]")].split(",")
+                if len(idxs) == 2:
+                    j_idx, a_idx = idxs
+                    if str(j) == j_idx.strip() and str(a) == a_idx.strip():
+                        nuevas_por_anio[a][j] = var.X
+
+        # vertimiento total del año a (sum_{d,h} V[a,d,h])
+        total_vert_a = 0.0
+        for key, var in vars_Vertimiento.items():
+            # Formato: Vertimiento[2025,12,7] => a,d,h
+            idxs = key[key.find("[")+1 : key.find("]")].split(",")
+            if len(idxs) == 3:
+                a_idx, d_idx, h_idx = idxs
+                if str(a) == a_idx.strip():
+                    total_vert_a += var.X
+        vert_total_anio[a] = total_vert_a
+
+    # 4. Construir texto resumen corto (para consola)
+    #    Este es un párrafo humano entendible.
+    resumen_lineas = []
+    resumen_lineas.append("=== RESUMEN OPTIMIZACIÓN ENERGÍA SOLAR Y BATERÍAS ===")
+    resumen_lineas.append(f"Estado del solver: {status}")
+    if obj is not None:
+        resumen_lineas.append(f"Valor objetivo (utilidad total maximizada): {obj:.2f}")
+    resumen_lineas.append(f"Horizonte temporal: {len(A)} años, {len(D)} días/año, {len(H)} horas/día.")
+    resumen_lineas.append(f"Tipos de batería modelados: {len(J)} (J = {J})")
+    resumen_lineas.append(f"Presupuesto inicial β: {beta_inicial}")
+
+    # año a año: utilidad, presupuesto final y nuevas compras
+    for a in A:
+        util_a = utilidad_por_anio.get(a, None)
+        pres_a = presupuesto_anio.get(a, None)
+        resumen_lineas.append(f"- Año {a}: utilidad={util_a:.2f} presupuesto_final={pres_a:.2f}")
+        # compras nuevas por tipo
+        if a in nuevas_por_anio:
+            for j in J:
+                if j in nuevas_por_anio[a]:
+                    resumen_lineas.append(
+                        f"    Nuevas baterías tipo {j}: {nuevas_por_anio[a][j]:.2f} unidades"
+                    )
+
+    # vertimiento total por año
+    for a in A:
+        resumen_lineas.append(
+            f"- Año {a}: energía vertida total = {vert_total_anio[a]:.4f} (suma sobre d,h)"
+        )
+
+    resumen_lineas.append("====================================================")
+
+    # imprimir en consola todo junto como un párrafo/ bloque
+    print("\n".join(resumen_lineas), flush=True)
+
+    # 5. Construir el reporte detallado para el .txt
+    #    Metemos más contexto: definición de sets, variables y restricciones
+    #    (tal como en tu formulación matemática) + resultados numéricos.
+
+    detalle = []
+    detalle.append("REPORTE COMPLETO DEL MODELO DE OPTIMIZACIÓN")
+    detalle.append(f"Generado: {datetime.now().isoformat()}")
+    detalle.append("")
+    detalle.append("1. Estado y objetivo")
+    detalle.append(f"   - Estado solver (Gurobi Status): {status}")
+    if obj is not None:
+        detalle.append(f"   - Objetivo total (sum_a U_a): {obj:.6f}")
+    detalle.append("")
+    detalle.append("2. Conjuntos")
+    detalle.append(f"   J (tipos baterías): {J}")
+    detalle.append(f"   A (años): {A}")
+    detalle.append(f"   D (días): {D[0]}..{D[-1]} ({len(D)} días)")
+    detalle.append(f"   H (horas): {H[0]}..{H[-1]} ({len(H)} horas)")
+    detalle.append("")
+    detalle.append("3. Parámetros clave")
+    detalle.append(f"   β (presupuesto inicial): {beta_inicial}")
+    detalle.append("   cj (costo compra/instalación por tipo de batería j):")
+    for j in J:
+        if j in costo_bateria:
+            detalle.append(f"      j={j}: cj={costo_bateria[j]}")
+    detalle.append("   tj (capacidad máxima de batería j):")
+    for j in J:
+        if j in capacidad_bateria:
+            detalle.append(f"      j={j}: t_j={capacidad_bateria[j]}")
+    detalle.append("   b0j (baterías iniciales por tipo j):")
+    for j in J:
+        if j in baterias_iniciales:
+            detalle.append(f"      j={j}: b0={baterias_iniciales[j]}")
+    detalle.append("")
+    detalle.append("4. Resultados por año")
+    for a in A:
+        util_a = utilidad_por_anio.get(a, None)
+        pres_a = presupuesto_anio.get(a, None)
+        detalle.append(f"   Año {a}:")
+        detalle.append(f"      Utilidad U_a = {util_a}")
+        detalle.append(f"      Presupuesto P_a = {pres_a}")
+        detalle.append(f"      Energía vertida total año {a} = {vert_total_anio[a]}")
+        # baterías instaladas y nuevas
+        for j in J:
+            bj = baterias_por_anio.get(a, {}).get(j, None)
+            bnj = nuevas_por_anio.get(a, {}).get(j, None)
+            detalle.append(f"      Tipo {j}: B[j,a]={bj}  BN[j,a]={bnj}")
+    detalle.append("")
+    detalle.append("5. Interpretación rápida")
+    detalle.append("   - La función objetivo maximiza la utilidad total anual sum_a U_a,")
+    detalle.append("     donde U_a considera ingresos por venta de energía a la red,")
+    detalle.append("     costos de compra de baterías y penalizaciones por vertimiento.")
+    detalle.append("   - Las restricciones aseguran:")
+    detalle.append("       * Balance de energía en baterías hora a hora.")
+    detalle.append("       * No inyectar más potencia que la red soporta (madh).")
+    detalle.append("       * Evolución del presupuesto y capacidad de compra.")
+    detalle.append("       * Límite físico de almacenamiento (t_j) y desgaste (Dj).")
+    detalle.append("   - El resultado indica cuántas baterías comprar cada año,")
+    detalle.append("     cómo se comporta el presupuesto, y cuánta energía se vierte.")
+
+    # 6. Guardar el reporte detallado en archivo .txt
+    with open(ruta_txt, "w", encoding="utf-8") as f:
+        f.write("\n".join(detalle))
+        f.write("\n")
+
+    # También puedes avisar en consola dónde quedó guardado
+    print(f"\n[INFO] Reporte detallado escrito en {ruta_txt}\n", flush=True)
+
+
+
 
 # funcion para modelar el (a,d,h) anterior dado el (a,d,h) actual
 def instante_anterior(A, D, H, a, d, h):
@@ -228,19 +431,28 @@ def ejecutar_modelo(datos: dict, mip_gap = 0.0, time_limit = None):
     modelo = build_model(datos)
 
     # gurobi config
-    modelo.Params.MIPGap = mip_gap
+    if mip_gap != 0.00:
+        modelo.Params.MIPGap = mip_gap
     if time_limit is not None:
-        modelo.Params.TimeLimit = time_limit
+        if time_limit != 0:
+            modelo.Params.TimeLimit = time_limit
 
     modelo.optimize()
+    # después de modelo.optimize()
+
+    if modelo.Status in [GRB.OPTIMAL, GRB.TIME_LIMIT]:
+        resumen_post_solve(modelo, datos, ruta_txt="resultado_detallado.txt")
+    else:
+        print(f"El modelo no encontró solución factible/óptima. Status={modelo.Status}")
+
     return modelo
     
-# Carpeta donde está este script (main.py)
-# sys.argv[0] es la ruta del script que se está ejecutando
-base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-
-# Carpeta 'data' al lado del script
-data_dir = os.path.join(base_dir, "data")
+# Carpeta donde está este script (src/main.py)
+script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+# Carpeta del proyecto (padre de src)
+project_dir = os.path.dirname(script_dir)
+# Carpeta data al mismo nivel que src
+data_dir = os.path.join(project_dir, "data")
 
 # Diccionario de rutas de excel para cada parámetro (independiente del SO)
 rutas = {
@@ -259,7 +471,7 @@ rutas = {
 
 #que hoja utilizar de cada excel
 #si no se pone nada, utiliza hoja con el nombre de la key
-hojas = {
+hojas = {"m": "mx001"
 }
 
 

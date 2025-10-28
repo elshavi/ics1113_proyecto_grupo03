@@ -1,6 +1,6 @@
 import pandas as pd 
 
-#convertir hoja tipo (j.valor) a dict {j: valor}
+#convertir hoja tipo (jvalor) a dict {j: valor}
 def hoja_to_dict_1d(df, key_col, val_col="value"):
     diccionario = {}
     for _, row in df.iterrows():
@@ -10,7 +10,7 @@ def hoja_to_dict_1d(df, key_col, val_col="value"):
             diccionario[key] = value
     return diccionario
 
-#convertir hoja del tipo (a,d.valor) a dict {(a,d,h): valor}
+#convertir hoja del tipo (a,d,h,valor) a dict {(a,d,h): valor}
 def hoja_to_dict_3d(df, cols=("a","d","h"), val_col="value"):
     diccionario = {}
     a_col, d_col, h_col = cols

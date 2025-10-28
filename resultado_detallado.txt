@@ -1,0 +1,158 @@
+REPORTE COMPLETO DEL MODELO DE OPTIMIZACIÓN
+Generado: 2025-10-28T02:42:43.860834
+
+1. Estado y objetivo
+   - Estado solver (Gurobi Status): 2
+   - Objetivo total (sum_a U_a): 755127146.349597
+
+2. Conjuntos
+   J (tipos baterías): [1.0, 2.0]
+   A (años): [2026.0, 2027.0, 2028.0, 2029.0, 2030.0, 2031.0, 2032.0, 2033.0, 2034.0, 2035.0, 2036.0, 2037.0, 2038.0, 2039.0, 2040.0, 2041.0, 2042.0, 2043.0, 2044.0, 2045.0]
+   D (días): 1..365 (365 días)
+   H (horas): 1.0..23.0 (23 horas)
+
+3. Parámetros clave
+   β (presupuesto inicial): 200000000.0
+   cj (costo compra/instalación por tipo de batería j):
+      j=1.0: cj=662400
+      j=2.0: cj=1440000
+   tj (capacidad máxima de batería j):
+      j=1.0: t_j=6.9
+      j=2.0: t_j=8.0
+   b0j (baterías iniciales por tipo j):
+      j=1.0: b0=232
+      j=2.0: b0=0
+
+4. Resultados por año
+   Año 2026.0:
+      Utilidad U_a = 30836609.889826506
+      Presupuesto P_a = 230836609.8898265
+      Energía vertida total año 2026.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2027.0:
+      Utilidad U_a = 31680214.98893988
+      Presupuesto P_a = 262516824.8787664
+      Energía vertida total año 2027.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2028.0:
+      Utilidad U_a = 32315995.274109095
+      Presupuesto P_a = 294832820.1528755
+      Energía vertida total año 2028.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2029.0:
+      Utilidad U_a = 32964536.44197154
+      Presupuesto P_a = 327797356.594847
+      Energía vertida total año 2029.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2030.0:
+      Utilidad U_a = 33626094.68063706
+      Presupuesto P_a = 361423451.2754841
+      Energía vertida total año 2030.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2031.0:
+      Utilidad U_a = 34300931.28454083
+      Presupuesto P_a = 395724382.5600249
+      Energía vertida total año 2031.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2032.0:
+      Utilidad U_a = 34989312.7887333
+      Presupuesto P_a = 430713695.3487582
+      Energía vertida total año 2032.0 = 8.631170441314754e-17
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2033.0:
+      Utilidad U_a = 35691511.07992673
+      Presupuesto P_a = 466405206.42868495
+      Energía vertida total año 2033.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2034.0:
+      Utilidad U_a = 36407803.503501534
+      Presupuesto P_a = 502813009.9321865
+      Energía vertida total año 2034.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2035.0:
+      Utilidad U_a = 37138472.971331954
+      Presupuesto P_a = 539951482.9035184
+      Energía vertida total año 2035.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2036.0:
+      Utilidad U_a = 37883808.07174754
+      Presupuesto P_a = 577835290.975266
+      Energía vertida total año 2036.0 = 7.105427357601002e-15
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2037.0:
+      Utilidad U_a = 38644103.19419134
+      Presupuesto P_a = 616479394.1694573
+      Energía vertida total año 2037.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2038.0:
+      Utilidad U_a = 39419658.57844126
+      Presupuesto P_a = 655899052.7478986
+      Energía vertida total año 2038.0 = 1.7763568394002505e-14
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2039.0:
+      Utilidad U_a = 40210780.65318513
+      Presupuesto P_a = 696109833.4010837
+      Energía vertida total año 2039.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2040.0:
+      Utilidad U_a = 41017781.8389436
+      Presupuesto P_a = 737127615.2400273
+      Energía vertida total año 2040.0 = 7.105427357601002e-15
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2041.0:
+      Utilidad U_a = 41840980.87712145
+      Presupuesto P_a = 778968596.1171488
+      Energía vertida total año 2041.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2042.0:
+      Utilidad U_a = 42680702.91373241
+      Presupuesto P_a = 821649299.0308812
+      Energía vertida total año 2042.0 = 1.7763568394002505e-14
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2043.0:
+      Utilidad U_a = 43537279.615671754
+      Presupuesto P_a = 865186578.6465529
+      Energía vertida total año 2043.0 = 8.881784197001252e-16
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2044.0:
+      Utilidad U_a = 44411049.31473386
+      Presupuesto P_a = 909597627.9612868
+      Energía vertida total año 2044.0 = 3.552713678800501e-15
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+   Año 2045.0:
+      Utilidad U_a = 45529518.38831047
+      Presupuesto P_a = 955127146.3495972
+      Energía vertida total año 2045.0 = 0.0
+      Tipo 1.0: B[j,a]=232.0  BN[j,a]=0.0
+      Tipo 2.0: B[j,a]=0.0  BN[j,a]=0.0
+
+5. Interpretación rápida
+   - La función objetivo maximiza la utilidad total anual sum_a U_a,
+     donde U_a considera ingresos por venta de energía a la red,
+     costos de compra de baterías y penalizaciones por vertimiento.
+   - Las restricciones aseguran:
+       * Balance de energía en baterías hora a hora.
+       * No inyectar más potencia que la red soporta (madh).
+       * Evolución del presupuesto y capacidad de compra.
+       * Límite físico de almacenamiento (t_j) y desgaste (Dj).
+   - El resultado indica cuántas baterías comprar cada año,
+     cómo se comporta el presupuesto, y cuánta energía se vierte.

@@ -26,7 +26,7 @@ def hoja_to_dict_3d(df, cols=("a","d","h"), val_col="value"):
 def leer_hoja(ruta_excel, hoja):
     return pd.read_excel(ruta_excel, hoja)
 
-def load_parameters(ruta_excel: str):
+def load_parameters(rutas, hojas):
     #usar hojas especificadas en hojas
     def hoja_para(parametro):
         return hojas.get(parametro, parametro)

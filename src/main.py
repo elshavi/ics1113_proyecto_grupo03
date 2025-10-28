@@ -2,7 +2,7 @@ import gurobipy as gp
 from gurobipy import GRB
 from extraer_datos import load_parameters
 import sys
-
+import os
 
 # funcion para modelar el (a,d,h) anterior dado el (a,d,h) actual
 def instante_anterior(A, D, H, a, d, h):
@@ -235,19 +235,26 @@ def ejecutar_modelo(datos: dict, mip_gap = 0.0, time_limit = None):
     modelo.optimize()
     return modelo
     
-#rutas de excel para cada parametro
+# Carpeta donde está este script (main.py)
+# sys.argv[0] es la ruta del script que se está ejecutando
+base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+
+# Carpeta 'data' al lado del script
+data_dir = os.path.join(base_dir, "data")
+
+# Diccionario de rutas de excel para cada parámetro (independiente del SO)
 rutas = {
-    "SETS": "../data/sets.xlsx",
-    "c": "../data/costos_baterias.xlsx",
-    "etac": "../data/eficiencia_carga.xlsx",
-    "etad": "../data/eficiencia_descarga.xlsx",
-    "t": "../data/capacidad_baterias.xlsx",
-    "b0": "../data/baterias_iniciales.xlsx",
-    "beta": "../data/presupuesto_inicial.xlsx",
-    "p": "../data/precio_energia.xlsx",
-    "m": "../data/capacidad_red.xlsx",
-    "w": "../data/produccion_solar.xlsx",
-    "gamma": "../data/costo_vertimiento.xlsx"
+    "SETS":  os.path.join(data_dir, "sets.xlsx"),
+    "c":     os.path.join(data_dir, "costos_baterias.xlsx"),
+    "etac":  os.path.join(data_dir, "eficiencia_carga.xlsx"),
+    "etad":  os.path.join(data_dir, "eficiencia_descarga.xlsx"),
+    "t":     os.path.join(data_dir, "capacidad_baterias.xlsx"),
+    "b0":    os.path.join(data_dir, "baterias_iniciales.xlsx"),
+    "beta":  os.path.join(data_dir, "presupuesto_inicial.xlsx"),
+    "p":     os.path.join(data_dir, "precio_energia.xlsx"),
+    "m":     os.path.join(data_dir, "capacidad_red.xlsx"),
+    "w":     os.path.join(data_dir, "produccion_solar.xlsx"),
+    "gamma": os.path.join(data_dir, "costo_vertimiento.xlsx"),
 }
 
 #que hoja utilizar de cada excel

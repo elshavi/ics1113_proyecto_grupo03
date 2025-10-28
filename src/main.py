@@ -12,7 +12,7 @@ def instante_anterior(A, D, H, a, d, h):
     d_max = D[-1]
     a_min = A[0]
 
-    # Caso 1: hora anterior mismo dia:
+    # Caso 1: hora anterior en el mismo dia:
     if h != h_min:
         return (a, d, H[H.index(h) - 1])
     # si no hay hora anterior, revisar dia anterior:

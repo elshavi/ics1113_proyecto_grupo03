@@ -465,17 +465,9 @@ def build_model(data: dict):
                     
     return m
 
-def ejecutar_modelo(datos: dict, mip_gap = 0.0, time_limit = None):
+def ejecutar_modelo(datos: dict):
 
     modelo = build_model(datos)
-
-    # gurobi config
-    if mip_gap != 0.00:
-        modelo.Params.MIPGap = mip_gap
-    if time_limit is not None:
-        if time_limit != 0:
-            modelo.Params.TimeLimit = time_limit
-
     modelo.optimize()
     # después de modelo.optimize()
 
@@ -538,11 +530,5 @@ hojas = {"m": "mx001",
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Uso: python main.py <mip_gap> <time_limit(seg)>")
-        sys.exit(1)
-    mip_gap = float(sys.argv[1])
-    time_limit = int(sys.argv[2])
-
     datos = load_parameters(rutas, hojas)
-    modelo = ejecutar_modelo(datos, mip_gap, time_limit)
+    modelo = ejecutar_modelo(datos)

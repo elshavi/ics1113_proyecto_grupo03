@@ -524,7 +524,8 @@ rutas = {
 #si no se pone nada, utiliza hoja con el nombre de la key
 hojas = {"m": "100khogares",
          "gamma": "anualvert",
-         "w": "generacion"
+         "w": "generacion",
+         "p": "preciofinal"
 }
 
 

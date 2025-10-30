@@ -364,23 +364,15 @@ def build_model(data: dict):
             gp.quicksum(cj[j] * BN[(j,a)] for j in J) <= Pa[a],
             name=f"limite_compra_a{a}")
         
-    # 6.5 Restricción de capacidad máxima de energía de red:
+    # 6.5 Restricción de minimo flujo a red (demanda):
     for a in A:
         for d in D:
             for h in H:
                 m.addConstr(
                     Fpr[(a,d,h)] +
                     gp.quicksum(Fbr[(j,a,d,h)] for j in J)
-                    <= madh[(a,d,h)],
+                    >= madh[(a,d,h)],
                     name=f"capacidad_red_a{a}_d{d}_h{h}")
-                
-    for a in A:
-        for d in D:
-            for h in H:
-                m.addConstr(
-                    Fpr[a,d,h] + gp.quicksum(Fbr[j,a,d,h] for j in J) >= 0.1*madh[(a,d,h)],
-                    name=f"min_demand_{a}_{d}_{h}"
-                )
                 
     # 6.6 Restricción de energía de baterías dinámicas:
     #valores inciales

@@ -522,10 +522,9 @@ rutas = {
 
 #que hoja utilizar de cada excel
 #si no se pone nada, utiliza hoja con el nombre de la key
-hojas = {"m": "mx001",
-         "b0": "0baterias",
-         "SETS": "10ANOS",
-         "c": "c01"
+hojas = {"m": "100khogares",
+         "gamma": "anualvert",
+         "w": "generacion"
 }
 
 

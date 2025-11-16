@@ -98,143 +98,160 @@ def load_parameters(rutas, hojas):
 #FUNCION PARA PRINTEAR RESUMEN DE LA SOLUCIÓN OPTIMA EN CONSOLA
 
 def resumen_post_solve(modelo, datos):
-    # 1) Estado y objetivo
-    status = modelo.Status
-    obj = modelo.ObjVal if getattr(modelo, "SolCount", 0) > 0 else None
-
-    # 2) Sets y parámetros clave
+    
+    # conjuntos y parametros
     J = datos["J"]
     A = datos["A"]
     D = datos["D"]
     H = datos["H"]
+    cj = datos["cj"]
+    beta_inicial = datos["beta"]
+    
+    # revisar si existe solucion
+    solution_exists = modelo.Status in [gp.GRB.OPTIMAL, gp.GRB.TIME_LIMIT]
 
-    beta_inicial       = datos.get("beta")
-    costo_bateria      = datos.get("cj", {})
-    capacidad_bateria  = datos.get("tj", {})
-    baterias_iniciales = datos.get("boj", {})
+    # funcion para obtenner valor de variable
+    def get_var_value(var_name):
+        var = modelo.getVarByName(var_name)
+        if var and solution_exists:
+            try:
+                # Retorna el valor de la variable
+                return var.X
+            except AttributeError:
+                return 0.0
+        return 0.0
 
-    # Helper para obtener variables por prefijo (robusto a nombres largos/cortos)
-    def get_var(name):
-        return {v.VarName: v for v in modelo.getVars() if v.VarName.startswith(name + "[")}
+    
+    annual_data = {a: {} for a in A}
+    purchase_log = [] # Almacena (año, dia, tipo, cantidad)
 
-    vars_B           = get_var("Baterias")          or get_var("B")
-    vars_BN          = get_var("BateriasNuevas")    or get_var("BN")
-    vars_Utilidad    = get_var("Utilidad")          or get_var("U")
-    vars_Presupuesto = get_var("Presupuesto")       or get_var("Pa")
-    vars_Vertimiento = get_var("Vertimiento")       or get_var("V")
-    vars_Fpr         = get_var("Fpr")
-    vars_Fbr         = get_var("Fbr")
-
-    # 3) Agregados por año
-    baterias_por_anio = {}   # {a: {j: B[j,a]}}
-    nuevas_por_anio   = {}   # {a: {j: BN[j,a]}}
-    utilidad_por_anio = {}   # {a: U[a]}
-    presupuesto_anio  = {}   # {a: Pa[a]}
-    vert_total_anio   = {}   # {a: sum_{d,h} V[a,d,h]}
-    fpr_total_anio    = {}   # {a: sum_{d,h} Fpr[a,d,h]}
-    fbr_total_anio    = {}   # {a: sum_{j,d,h} Fbr[j,a,d,h]}
-    fbr_tipo_anio     = {}   # {a: {j: sum_{d,h} Fbr[j,a,d,h]}}
-
+    # --- Recoleccion de Datos ---
     for a in A:
-        # Utilidad y presupuesto
-        for key, var in vars_Utilidad.items():
-            idx = key[key.find("[")+1 : key.find("]")]
-            if str(a) == idx:
-                utilidad_por_anio[a] = var.X
+        # --- 1. Variables Anuales (Utilidad, Presupuesto) ---
+        utilidad_a = get_var_value(f"U[{a}]")
+        presupuesto_a = get_var_value(f"Pa[{a}]")
 
-        for key, var in vars_Presupuesto.items():
-            idx = key[key.find("[")+1 : key.find("]")]
-            if str(a) == idx:
-                presupuesto_anio[a] = var.X
-
-        # Baterías totales y nuevas por tipo
-        baterias_por_anio[a] = {}
-        nuevas_por_anio[a]   = {}
-        for j in J:
-            for key, var in vars_B.items():
-                idxs = key[key.find("[")+1 : key.find("]")].split(",")
-                if len(idxs) == 2:
-                    j_idx, a_idx = idxs
-                    if str(j) == j_idx.strip() and str(a) == a_idx.strip():
-                        baterias_por_anio[a][j] = var.X
-            for key, var in vars_BN.items():
-                idxs = key[key.find("[")+1 : key.find("]")].split(",")
-                if len(idxs) == 2:
-                    j_idx, a_idx = idxs
-                    if str(j) == j_idx.strip() and str(a) == a_idx.strip():
-                        nuevas_por_anio[a][j] = var.X
-
-        # Vertimiento total año a
-        total_vert_a = 0.0
-        for key, var in vars_Vertimiento.items():
-            idxs = key[key.find("[")+1 : key.find("]")].split(",")
-            if len(idxs) == 3:
-                a_idx, d_idx, h_idx = [s.strip() for s in idxs]
-                if str(a) == a_idx:
-                    total_vert_a += var.X
-        vert_total_anio[a] = total_vert_a
-
-        # Fpr total por año
-        total_fpr_a = 0.0
-        for key, var in vars_Fpr.items():
-            idxs = key[key.find("[")+1 : key.find("]")].split(",")
-            if len(idxs) == 3:
-                a_idx, d_idx, h_idx = [s.strip() for s in idxs]
-                if str(a) == a_idx:
-                    total_fpr_a += var.X
-        fpr_total_anio[a] = total_fpr_a
-
-        # Fbr total por año y por tipo
-        total_fbr_a = 0.0
-        fbr_tipo_anio[a] = {j: 0.0 for j in J}
-        for key, var in vars_Fbr.items():
-            idxs = key[key.find("[")+1 : key.find("]")].split(",")
-            # Formato: Fbr[j,a,d,h]
-            if len(idxs) == 4:
-                j_idx, a_idx, d_idx, h_idx = [s.strip() for s in idxs]
-                if str(a) == a_idx:
-                    total_fbr_a += var.X
-                    # acumular por tipo j (permitir j no-int)
-                    try:
-                        j_key = int(j_idx)
-                    except ValueError:
-                        j_key = j_idx
-                    if j_key in fbr_tipo_anio[a]:
-                        fbr_tipo_anio[a][j_key] += var.X
-                    else:
-                        fbr_tipo_anio[a][j_key] = fbr_tipo_anio[a].get(j_key, 0.0) + var.X
-        fbr_total_anio[a] = total_fbr_a
-
-    # 4) Resumen corto en consola
-    lineas = []
-    lineas.append("=== RESUMEN OPTIMIZACIÓN ENERGÍA SOLAR Y BATERÍAS ===")
-    lineas.append(f"Estado del solver: {status}")
-    if obj is not None:
-        lineas.append(f"Valor objetivo (utilidad total): {obj:.2f}")
-    lineas.append(f"Horizonte: {len(A)} años, {len(D)} días/año, {len(H)} horas/día.")
-    lineas.append(f"Tipos de batería: {len(J)} (J = {J})")
-    lineas.append(f"Presupuesto inicial β: {beta_inicial}")
-
-    for a in A:
-        util_a = utilidad_por_anio.get(a, 0.0)
-        pres_a = presupuesto_anio.get(a, 0.0)
-        lineas.append(f"- Año {a}: utilidad={util_a:.2f}  presupuesto_final={pres_a:.2f}")
-        # Compras nuevas por tipo
-        if a in nuevas_por_anio:
+        # Inicializar sumas anuales
+        total_bn_a = {j: 0.0 for j in J}
+        total_b_a = {j: 0.0 for j in J}
+        
+        costo_bat_a = 0.0
+        costo_vert_a = 0.0
+        vert_total_a = 0.0
+        fpr_total_a = 0.0
+        fbr_total_a = 0.0
+        
+        # --- 2. Agregacion Diaria/Horaria (Costos, Flujos, V, BN) ---
+        for d in D:
+            # Costo de Baterias (Compras Diarias/Trimestrales)
             for j in J:
-                if j in nuevas_por_anio[a]:
-                    lineas.append(f"    Nuevas baterías tipo {j}: {nuevas_por_anio[a][j]:.2f} u.")
+                var_bn_name = f"BN[{j},{a},{d}]"
+                bn_x = get_var_value(var_bn_name)
+                
+                # Registra compra
+                if bn_x > 0.001: 
+                    total_bn_a[j] += bn_x
+                    costo_bat_a += cj[j] * bn_x 
+                    purchase_log.append((a, d, j, bn_x))
+            
+            # Flujos, V, Costos (Suma Horaria para el dia/año)
+            for h in H:
+                idx_adh = (a, d, h)
+                
+                V_X = get_var_value(f"V[{a},{d},{h}]")
+                Fpr_X = get_var_value(f"Fpr[{a},{d},{h}]")
+                
+                # Fbr_X
+                Fbr_X_sum_j = 0.0
+                for j in J:
+                    Fbr_X_sum_j += get_var_value(f"Fbr[{j},{a},{d},{h}]")
+                
+                vert_total_a += V_X
+                fpr_total_a += Fpr_X
+                fbr_total_a += Fbr_X_sum_j
+                
+                # Accede al costo de vertimiento (gamma)
+                costo_vert_a += datos["gamma"].get(idx_adh, 0.0) * V_X
+                    
+        # --- 3. Capacidad Total de Bateria (B[j,a]) ---
+        for j in J:
+            total_b_a[j] = get_var_value(f"B[{j},{a}]")
+            
+        annual_data[a] = {
+            "Utilidad": utilidad_a,
+            "PresupuestoFinal": presupuesto_a,
+            "BN": total_bn_a,
+            "B": total_b_a,
+            "Fpr": fpr_total_a,
+            "Fbr": fbr_total_a,
+            "CostoBat": costo_bat_a,
+            "CostoVert": costo_vert_a,
+            "Vtotal": vert_total_a
+        }
 
-    # Vertimiento y flujos a red por año
+    # --- Impresion del Reporte Consolidado ---
+    lineas = []
+    
+    # 1. Encabezado
+    lineas.append("=== RESUMEN OPTIMIZACION ENERGIA SOLAR Y BATERIAS ===")
+    lineas.append(f"Estado del solver: {modelo.Status}")
+    if modelo.ObjVal is not None:
+        lineas.append(f"Valor objetivo (utilidad total): {modelo.ObjVal:.2f}")
+    lineas.append(f"Horizonte: {len(A)} anos, {len(D)} dias/ano, {len(H)} horas/dia.")
+    lineas.append(f"Tipos de bateria: {len(J)} (J = {J})")
+    lineas.append(f"Presupuesto inicial Beta: {beta_inicial:.2f}")
+
+    # 2. Tabla Resumen Anual Consolidado
+    lineas.append("\n=== RESUMEN ANUAL CONSOLIDADO ===")
+
+    # Crear encabezado de tabla
+    header = ["Ano", "Utilidad", "Ppto Final", "BN Total", "B Total", "Costo Bat", "Costo Vert", "Vertida (V)", "Fpr", "Fbr"]
+    lineas.append("| " + " | ".join(header) + " |")
+
+    # Filas Anuales
     for a in A:
-        lineas.append(f"- Año {a}: energía vertida = {vert_total_anio.get(a, 0.0):.4f} (∑d,h)")
-        lineas.append(
-            f"          energía a red: Fpr={fpr_total_anio.get(a, 0.0):.4f} (paneles→red), "
-            f"Fbr={fbr_total_anio.get(a, 0.0):.4f} (baterías→red)"
-        )
+        data = annual_data[a]
+        total_bn = sum(data["BN"].values())
+        total_b = sum(data["B"].values())
+        
+        row = [
+            f"{a:.0f}",
+            f"{data['Utilidad']:.0f}", 
+            f"{data['PresupuestoFinal']:.0f}", 
+            f"{total_bn:.0f}",
+            f"{total_b:.0f}",
+            f"{data['CostoBat']:.0f}",
+            f"{data['CostoVert']:.2f}",
+            f"{data['Vtotal']:.2f}",
+            f"{data['Fpr']:.2f}",
+            f"{data['Fbr']:.2f}"
+        ]
+        lineas.append("| " + " | ".join(row) + " |")
 
-    lineas.append("====================================================")
-    print("\n".join(lineas), flush=True)
+    # 3. Detalle de Baterias por Tipo y Año
+    lineas.append("\n=== DETALLE DE BATERIAS POR TIPO Y ANO ===")
+    for a in A:
+        total_b = sum(annual_data[a]['B'].values())
+        lineas.append(f"- Ano {a:.0f} (Total Baterias en Inventario: {total_b:.0f} u.)")
+        for j in J:
+            bn_val = annual_data[a]['BN'][j]
+            b_val = annual_data[a]['B'][j]
+            lineas.append(f"  > Tipo J{j:.0f}: Compradas={bn_val:.0f} u. | Total en Inventario={b_val:.0f} u.")
+
+    # 4. Registro Detallado de Compras (si existen)
+    if purchase_log:
+        lineas.append("\n=== REGISTRO DETALLADO DE COMPRAS (Dia, Tipo, Cantidad) ===")
+        lineas.append("Nota: Compra total en el ano se divide en estos dias.")
+        lineas.append("| Ano | Dia | Tipo (J) | Cantidad |")
+        lineas.append("|---|---|---|---|")
+        for a, d, j, amount in purchase_log:
+            lineas.append(f"| {a:.0f} | {d:.0f} | {j:.0f} | {amount:.0f} |")
+    else:
+        lineas.append("\n=== REGISTRO DETALLADO DE COMPRAS: No se encontraron compras diarias. ===")
+
+    lineas.append("=====================================================")
+    print("\n".join(lineas))
+
 
 
 # funcion para modelar el (a,d,h) anterior dado el (a,d,h) actual
@@ -290,7 +307,7 @@ def build_model(data: dict):
     B = m.addVars(J, A, vtype=GRB.INTEGER, lb=0.0, name="B")
 
     # BN_ja: baterías nuevas del tipo j en año a
-    BN = m.addVars(J, A, vtype=GRB.INTEGER, lb=0.0, name="BN")
+    BN = m.addVars(J, A, D, vtype=GRB.INTEGER, lb=0.0, name="BN")
 
     # Fpr_adh: flujo de paneles a red en año a, dia d y hora h
     Fpr = m.addVars(A, D, H, vtype=GRB.CONTINUOUS, lb=0.0, name="Fpr")
@@ -330,7 +347,8 @@ def build_model(data: dict):
             for d in D for h in H)
 
         # costo anual (baterías y vertimiento)
-        costo_baterias = gp.quicksum(cj[j] * BN[(j,a)] for j in J)
+        #costo_baterias = gp.quicksum(cj[j] * BN[(j,a)] for j in J) este era por año, viejo
+        costo_baterias = gp.quicksum(cj[j] * BN[(j,a,d)] for j in J for d in D)
         costo_vertimiento = gp.quicksum(V[(a,d,h)] * gamma[(a,d,h)] for d in D for h in H)
 
         m.addConstr(U[a] == ingreso - costo_baterias - costo_vertimiento, name=f"utilidad_{a}")
@@ -340,13 +358,19 @@ def build_model(data: dict):
     a0 = A[0]
     for j in J:
         # caso base
-        m.addConstr(B[(j,a0)] == boj[j], name=f"base_baterias_{j}")
+        #m.addConstr(B[(j,a0)] == boj[j], name=f"base_baterias_{j}") este es por año
+        m.addConstr(B[(j,a0)] == boj[j] + gp.quicksum(BN[(j,a0,d)] for d in D), name=f"base_baterias_{j}")
         # caso general
         for idx_a in range(1, len(A)):
             a_actual = A[idx_a]
             a_anterior = A[idx_a - 1]
-            m.addConstr(B[(j,a_actual)] == B[(j,a_anterior)] + BN[(j,a_actual)],
-                        name=f"baterias_{j}_{a_actual}")
+
+            # este es por año
+            #m.addConstr(B[(j,a_actual)] == B[(j,a_anterior)] + BN[(j,a_actual)],
+                        #name=f"baterias_{j}_{a_actual}")
+            
+            m.addConstr(B[(j,a_actual)] == B[(j,a_anterior)] + gp.quicksum(BN[(j,a_actual,d)] for d in D),
+                            name=f"baterias_{j}_{a_actual}")
 
     # 6.3 Límite de compras por año (bmja)
     # caso base
@@ -360,27 +384,37 @@ def build_model(data: dict):
 
     # 6.4 Restricción de compra de baterías por presupuesto:
     for a in A:
-        m.addConstr(
-            gp.quicksum(cj[j] * BN[(j,a)] for j in J) <= Pa[a],
-            name=f"limite_compra_a{a}")
+        #viejo, por año
+        #m.addConstr(
+            #gp.quicksum(cj[j] * BN[(j,a)] for j in J) <= Pa[a],
+            #name=f"limite_compra_a{a}")
         
-    # 6.5 Restricción de capacidad máxima de energía de red:
+        m.addConstr(
+        gp.quicksum(cj[j] * BN[(j,a,d)] for j in J for d in D) <= Pa[a],
+        name=f"limite_compra_a{a}")
+
+    # T1: 1, T2: 91, T3: 182, T4: 274
+    D_compra = [1, 91, 182, 274]
+
+    # Restricción 6.4b: Forzar la compra de baterías (BN) a ocurrir solo en días específicos (Trimestral)
+    for j in J:
+        for a in A:
+            for d in D:
+                # D es el conjunto de días (ej. [1, 2, ..., 365]).
+                # Solo permitimos que BN sea positiva si el día 'd' está en D_compra
+                if d not in D_compra:
+                    # Si el día no es un día de compra, BN debe ser 0.
+                    m.addConstr(BN[(j,a,d)] == 0, name=f"no_compra_trimestral_{j}_{a}_{d}")
+        
+    # 6.5 Restricción de minimo flujo a red (demanda):
     for a in A:
         for d in D:
             for h in H:
                 m.addConstr(
                     Fpr[(a,d,h)] +
                     gp.quicksum(Fbr[(j,a,d,h)] for j in J)
-                    <= madh[(a,d,h)],
+                    >= madh[(a,d,h)],
                     name=f"capacidad_red_a{a}_d{d}_h{h}")
-                
-    for a in A:
-        for d in D:
-            for h in H:
-                m.addConstr(
-                    Fpr[a,d,h] + gp.quicksum(Fbr[j,a,d,h] for j in J) >= 0.1*madh[(a,d,h)],
-                    name=f"min_demand_{a}_{d}_{h}"
-                )
                 
     # 6.6 Restricción de energía de baterías dinámicas:
     #valores inciales
@@ -390,7 +424,7 @@ def build_model(data: dict):
     for j in J:
         #caso base
         m.addConstr(
-            E[(j,a0,d0,h0)] == 0.0,
+            E[(j,a0,d0,h0)] == tj[j] * boj[j] * 0.5,
             name=f"energia_bateria_base_{j}")
         #caso general
         for a in A:
@@ -469,39 +503,12 @@ def ejecutar_modelo(datos: dict):
 
     modelo = build_model(datos)
     modelo.optimize()
-    # después de modelo.optimize()
 
-    if modelo.Status in [GRB.OPTIMAL, GRB.TIME_LIMIT]:
+    # La impresion de resumen_post_solve ahora contiene toda la informacion
+    if modelo.Status in [gp.GRB.OPTIMAL, gp.GRB.TIME_LIMIT]:
         resumen_post_solve(modelo, datos)
-        print("\n=== Diagnóstico Económico ===")
-
-        J = datos["J"]
-        A = datos["A"]
-        D = datos["D"]
-        H = datos["H"]
-        padh = datos["padh"]
-        gamma = datos["gamma"]
-        cj = datos["cj"]
-
-        for a in A:
-            ingresos = sum(
-                padh[(a,d,h)] * (
-                    modelo.getVarByName(f"Fpr[{a},{d},{h}]").X +
-                    sum(modelo.getVarByName(f"Fbr[{j},{a},{d},{h}]").X for j in J)
-                )
-                for d in D for h in H
-            )
-
-            costo_bat = sum(cj[j] * modelo.getVarByName(f"BN[{j},{a}]").X for j in J)
-
-            vert_total = sum(modelo.getVarByName(f"V[{a},{d},{h}]").X for d in D for h in H)
-            costo_vert = sum(gamma[(a,d,h)] * modelo.getVarByName(f"V[{a},{d},{h}]").X for d in D for h in H)
-
-            print(f"Año {a}: ingresos={ingresos:.2f}, costo_bat={costo_bat:.2f}, costo_vert={costo_vert:.2f}, Vtotal={vert_total:.2f}")
-
-        print("==============================\n")
     else:
-        print(f"El modelo no encontró solución factible/óptima. Status={modelo.Status}")
+        print(f"El modelo no encontro solucion factible/optima. Status={modelo.Status}")
 
     return modelo
     
@@ -523,9 +530,12 @@ rutas = {
 #que hoja utilizar de cada excel
 #si no se pone nada, utiliza hoja con el nombre de la key
 hojas = {"m": "100khogares",
+         "b0": "b0",
+         "SETS": "10ANOS",
          "gamma": "anualvert",
          "w": "generacion",
-         "p": "preciofinal"
+         "t": "t_chico",
+         "c": "c_chico"
 }
 
 

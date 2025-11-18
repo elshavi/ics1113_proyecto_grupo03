@@ -205,7 +205,7 @@ def resumen_post_solve(modelo, datos):
     lineas.append("\n=== RESUMEN ANUAL CONSOLIDADO ===")
 
     # Crear encabezado de tabla
-    header = ["Ano", "Utilidad", "Ppto Final", "BN Total", "B Total", "Costo Bat", "Costo Vert", "Vertida (V)", "Fpr", "Fbr"]
+    header = ["Ano ", "Utilidad", "Ppto Final", "BN Total", "B Total ", "Costo Bat", "Costo Vert", "Vertida (V) ", "Fpr     ", "Fbr      "]
     lineas.append("| " + " | ".join(header) + " |")
 
     # Filas Anuales
@@ -215,16 +215,16 @@ def resumen_post_solve(modelo, datos):
         total_b = sum(data["B"].values())
         
         row = [
-            f"{a:.0f}",
-            f"{data['Utilidad']:.0f}", 
-            f"{data['PresupuestoFinal']:.0f}", 
-            f"{total_bn:.0f}",
-            f"{total_b:.0f}",
-            f"{data['CostoBat']:.0f}",
-            f"{data['CostoVert']:.2f}",
-            f"{data['Vtotal']:.2f}",
-            f"{data['Fpr']:.2f}",
-            f"{data['Fbr']:.2f}"
+            f"{a:4.0f}",
+            f"{data['Utilidad']:8.0f}", 
+            f"{data['PresupuestoFinal']:10.0f}", 
+            f"{total_bn:8.0f}",
+            f"{total_b:8.0f}",
+            f"{data['CostoBat']:9.0f}",
+            f"{data['CostoVert']:10.2f}",
+            f"{data['Vtotal']:12.2f}",
+            f"{data['Fpr']:6.2f}",
+            f"{data['Fbr']:6.2f}"
         ]
         lineas.append("| " + " | ".join(row) + " |")
 
@@ -242,10 +242,10 @@ def resumen_post_solve(modelo, datos):
     if purchase_log:
         lineas.append("\n=== REGISTRO DETALLADO DE COMPRAS (Dia, Tipo, Cantidad) ===")
         lineas.append("Nota: Compra total en el ano se divide en estos dias.")
-        lineas.append("| Ano | Dia | Tipo (J) | Cantidad |")
-        lineas.append("|---|---|---|---|")
+        lineas.append("| Ano  | Dia  | Tipo (J) | Cantidad |")
+        lineas.append("|------|------|----------|----------|")
         for a, d, j, amount in purchase_log:
-            lineas.append(f"| {a:.0f} | {d:.0f} | {j:.0f} | {amount:.0f} |")
+            lineas.append(f"| {a:4.0f} | {d:4.0f} | {j:8.0f} | {amount:8.0f} |")
     else:
         lineas.append("\n=== REGISTRO DETALLADO DE COMPRAS: No se encontraron compras diarias. ===")
 
